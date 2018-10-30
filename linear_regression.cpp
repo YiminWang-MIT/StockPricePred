@@ -11,8 +11,8 @@ using namespace arma;
 int main(){
   mat data;
   rowvec responses;
-  mlpack::data::Load("data/dataA_train_pre.csv", data);
-  mlpack::data::Load("data/dataA_train_res.csv", responses);
+  mlpack::data::Load("data/dataA_int_pre_train.csv", data);
+  mlpack::data::Load("data/dataA_int_res_train.csv", responses);
 
   std::cout << data.n_rows << ' ' << data.n_cols << std::endl;
   std::cout << responses.n_rows << ' ' << responses.n_cols << std::endl;
@@ -29,14 +29,12 @@ int main(){
 
   std::cout << norm2 << std::endl;
 
-
-
   std::cout << __LINE__ << std::endl;
   mat points;
   rowvec predictions;
   rowvec truevalue;
-  mlpack::data::Load("data/dataA_test_pre.csv", points);
-  mlpack::data::Load("data/dataA_test_res.csv", truevalue);
+  mlpack::data::Load("data/dataA_int_pre_test.csv", points);
+  mlpack::data::Load("data/dataA_int_res_test.csv", truevalue);
 
   std::cout << __LINE__ << std::endl;
   std::cout << truevalue.size() << ' ' << truevalue[0] << std::endl;
