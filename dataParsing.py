@@ -1,4 +1,9 @@
 import csv
+noise=2e9
+infotime=1000000 #in micro sec
+predicttime=1800*infotime
+back_trace=5
+t0=1800019613
 
 def basic_price(sym):
     with open('data/data2.csv') as csv_infile:
@@ -23,6 +28,30 @@ def basic_price(sym):
                         totline+=1
                 line_count+=1
             print tottime, totline
+
+def basic_price_change(sym):
+    with open('data/data2.csv') as csv_infile:
+        with open('data/data'+sym+'_pricechange.csv', mode='w') as csv_outfile:
+            csv_reader=csv.reader(csv_infile, delimiter=',')
+            csv_writer=csv.writer(csv_outfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            lasttime=-1
+            lastbid=0
+            lastask=0
+            csv_reader.next();
+            for row in csv_reader:
+                [time, symbol, bid, bidsz, ask, asksz, trdsz, trdsd, trdpx]=row
+                if bid!='0' and ask!='0' and symbol=='STOCK'+sym:
+                    if lasttime==-1:
+                        lasttime=long(time)
+                        lastbid=bid
+                        lastask=ask
+                    else:
+                        if bid!=lastbid or ask!=lastask:
+                            lastbid=bid
+                            lastask=ask
+                            timedif=long(time)-lasttime
+                            lasttime=long(time)
+                            csv_writer.writerow([time,symbol,bid,ask,timedif])
 
 def basic_trd(sym):
     with open('data/data2.csv') as csv_infile:
@@ -49,15 +78,14 @@ def basic_trd(sym):
                 line_count+=1
             print tottime, totline
 
-def price_interpolate(sym):
+def price_interpolate(sym):#interpolate based infotime steps
     with open('data/data2.csv') as csv_infile:
         with open('data/data'+sym+'_int.csv', mode='w') as csv_outfile:
             csv_reader=csv.reader(csv_infile, delimiter=',')
             csv_writer=csv.writer(csv_outfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             line_count=0
-            t0=-1
-            tstep=1000000
-            count=1000
+            tstep=infotime
+            count=int(noise/infotime)#get rid of noise part
             lasttime=-1
             lastask=0
             lastbid=0
@@ -66,25 +94,20 @@ def price_interpolate(sym):
                 if line_count>=1:
                     [time, symbol, bid, bidsz, ask, asksz, trdsz, trdsd, trdpx]=row
                     if bid!='0' and ask!='0' and symbol==('STOCK'+sym):
-                        if t0==-1:
-                            t0=long(time)
+                        if long(time)-t0<count*tstep: # this point still earlier
                             lasttime=long(time)
                             lastbid=long(bid)
-                            lastask=long(bid)
-                            currenttime=t0+count+tstep
+                            lastask=long(ask)
                         else:
-                            if long(time)-t0<count*tstep: # this point still earlier
-                                lasttime=long(time)
-                                lastbid=long(bid)
-                                lastask=long(bid)
-                            else:
+                            currenttime=t0+count*tstep
+                            while long(time)>=currenttime:
+                                #change time unit to count 
+                                csv_writer.writerow([count,symbol,lastbid,lastask,int(bidsz),int(asksz)])
+                                count+=1
                                 currenttime=t0+count*tstep
-                                while long(time)>=currenttime:
-                                    csv_writer.writerow([currenttime-t0,symbol,lastbid,lastask])
-                                    count+=1
-                                    currenttime=t0+count*tstep
-                                lasttime=long(time)
-                                lastprice=long(bid)
+                            lasttime=long(time)
+                            lastbid=long(bid)
+                            lastask=long(ask)
                 line_count+=1
                 #if line_count>1000000:
                 #    break
@@ -195,7 +218,7 @@ def training_naive(sym):
                 csv_reader=csv.reader(csv_infile, delimiter=',')
                 csv_writer_pre=csv.writer(csv_outfile_pre, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                 csv_writer_res=csv.writer(csv_outfile_res, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                basename='STOCKA'
+                basename='STOCKB'
                 tm1=[]
                 tm2=[]
                 csv_reader.next() # get rid fo title line
@@ -232,6 +255,77 @@ def training_naive(sym):
                         statuslist=[time, bidprice, askprice]
                         csv_writer_pre.writerow([statuslist[0]]+old_data[-2]+old_data[-3]+old_data[-4]+old_data[-5]+old_data[-11]+old_data[-21]+old_data[-51]+old_data[-101]+old_data[-201]+old_data[-501]+old_data[-1001])
                         csv_writer_res.writerow([statuslist[1]]);
+                        #update old data
+                        old_data=old_data[1:]
+                        old_data.append(statuslist)
+
+def training(sym):
+    '''
+    predictors: long term and short term trend
+        t-1: price deltaT1
+        t-2: price deltaT2
+        t-3: price deltaT3
+        t-4: price deltaT4
+        t-10: price deltaT10
+        t-100: price deltaT100
+        t-1000: price deltaT1000
+        ... until 10*predicttime
+
+    response:
+        t: bidprice
+    '''
+    with open('data/data'+sym+'.csv') as csv_infile:
+        with open('data/data'+sym+'_parsed.csv', mode='w') as csv_outfile:
+                csv_reader=csv.reader(csv_infile, delimiter=',')
+                csv_writer=csv.writer(csv_outfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                basename='STOCK'+sym[0]
+                tm1=[]
+                tm2=[]
+                old_data=[]
+                data_length=back_trace*predicttime/infotime
+                #collect the first bunch of entries 
+                while len(old_data)<data_length:
+                    row=csv_reader.next()
+                    #[time, symbol, bid, bidsz, ask, asksz, trdsz, trdsd, trdpx]=row
+                    [time, symbol, bid, ask, bidsz, asksz]=row
+                    if symbol==basename:
+                        if bid!='0' and ask!='0':
+                            bidprice=long(bid)
+                            askprice=long(ask)
+                        else:
+                            bidprice=long(trdpx)
+                            askprice=long(trdpx)
+                        statuslist=[bidprice, askprice, bidsz, asksz]
+                        old_data.append(statuslist)
+                #parsing predictors
+                for row in csv_reader:
+                    #[time, symbol, bid, bidsz, ask, asksz, trdsz, trdsd, trdpx]=row
+                    [time, symbol, bid, ask, bidsz, asksz]=row
+                    if symbol==basename:
+                        if bid!='0' and ask!='0':
+                            bidprice=long(bid)
+                            askprice=long(ask)
+                        else:
+                            bidprice=long(trdpx)
+                            askprice=long(trdpx)
+                        statuslist=[bidprice, askprice, bidsz, asksz]
+
+                        #parse the output list
+                        back_length=predicttime/infotime
+                        outputlist=[time]+list(statuslist)
+                        #small info steps
+                        #for i in xrange(1,5):
+                        #    outputlist+=old_data[-back_length-i]
+                        #large info steps
+                        i=64
+                        while i<predicttime/infotime:
+                            outputlist+=old_data[-back_length-i]
+                            i*=2
+                        #small predict steps
+                        for i in xrange(1,back_trace):
+                            outputlist+=old_data[-back_length-i*predicttime/infotime]
+
+                        csv_writer.writerow(outputlist)
                         #update old data
                         old_data=old_data[1:]
                         old_data.append(statuslist)
@@ -276,7 +370,10 @@ def file_divider(symbol):
                     line_count+=1
 
 #output('dataA_test_pre','dataA_test_res','dataA_test_result')
+
 price_interpolate('A')
-training_naive('A_int')
-file_divider('A_int_pre')
-file_divider('A_int_res')
+training('A_int')
+
+price_interpolate('B')
+training('B_int')
+#basic_price_change('A')

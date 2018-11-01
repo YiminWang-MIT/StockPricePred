@@ -9,7 +9,7 @@ set title ""
 
 set autoscale
 set yrange [4120:4160]
-#set xrange [19e8:20e8]
+set xrange [0:1e10]
 set out "plots/stockA.png"
 #plot "data/dataA_train.csv" using 1:2 w p title "STOCKA bid",\
 #  "data/dataA_train.csv" using 1:3 w p title "STOCKA ask"
@@ -80,6 +80,22 @@ set xrange [0:100]
 set yrange [1:200000] 
 plot 'data/data2.csv' using (bin($4,bw)):(1.0) smooth freq with boxes title 'bid',\
   'data/data2.csv' using (bin($6,bw)):(1.0) smooth freq with boxes title 'ask'
+unset out
+unset logscale
+unset xrange
+unset yrange
+
+set term png size 1200,600
+set xlabel "Delta t [microsec]"
+set ylabel "relative number of entries"
+set out "plots/pricechange_time.png"
+set logscale y
+set boxwidth 100000
+bw = 100000
+bin(x,width)=width*floor(x/width) + bw/2.0 
+set xrange [0:10000000] 
+set yrange [1:20000] 
+plot 'data/dataA_pricechange.csv' using (bin($5,bw)):(1.0) smooth freq with boxes title 'A'
 unset out
 unset logscale
 unset xrange
